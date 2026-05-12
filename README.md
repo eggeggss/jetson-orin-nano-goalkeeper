@@ -4,6 +4,14 @@
 
 ---
 
+## 示範影片 / Demo Video
+
+[![智慧門禁系統示範](https://img.youtube.com/vi/b6HfHJ3-yZY/maxresdefault.jpg)](https://www.youtube.com/watch?v=b6HfHJ3-yZY)
+
+▶ [https://www.youtube.com/watch?v=b6HfHJ3-yZY](https://www.youtube.com/watch?v=b6HfHJ3-yZY)
+
+---
+
 ## 中文說明
 
 ### 系統概述
