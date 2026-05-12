@@ -6,9 +6,17 @@
 
 ## 示範影片 / Demo Video
 
+### 身份驗證流程 / Identity Verification Flow
+
 [![智慧門禁系統示範](https://img.youtube.com/vi/b6HfHJ3-yZY/maxresdefault.jpg)](https://www.youtube.com/watch?v=b6HfHJ3-yZY)
 
 ▶ [https://www.youtube.com/watch?v=b6HfHJ3-yZY](https://www.youtube.com/watch?v=b6HfHJ3-yZY)
+
+### 觸發警報示範 / Alarm Trigger Demo
+
+[![觸發警報示範](https://img.youtube.com/vi/fvGbTOwMmkA/maxresdefault.jpg)](https://www.youtube.com/watch?v=fvGbTOwMmkA)
+
+▶ [https://www.youtube.com/watch?v=fvGbTOwMmkA](https://www.youtube.com/watch?v=fvGbTOwMmkA)
 
 ---
 
