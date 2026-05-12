@@ -1,4 +1,4 @@
-# 機房門禁系統 — Face-Based Access Kiosk
+# 智慧門禁系統 — Face-Based Access Kiosk
 
 > **語言 / Language**: [中文](#中文說明) | [English](#english-guide)
 
