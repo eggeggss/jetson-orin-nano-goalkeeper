@@ -1,0 +1,12 @@
+data/
+models/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+*.db
+*.jpg
+*.jpeg
+*.png
+.git

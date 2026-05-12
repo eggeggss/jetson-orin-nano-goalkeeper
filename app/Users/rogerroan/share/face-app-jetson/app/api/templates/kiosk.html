@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>機房門禁 — 即時監控</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #040d1a; color: #e2e8f0;
+               font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+
+  /* ── Layout ── */
+  .page { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 0 24px;
+           background: #0a1628; border-bottom: 1px solid #1e3a5f; }
+  header h1 { font-size: 1.1rem; font-weight: 700; color: #f8fafc; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  .header-link { color: #64748b; text-decoration: none; font-size: .8rem; }
+  .header-link:hover { color: #94a3b8; }
+  .sys-clock { font-size: .85rem; color: #64748b; font-variant-numeric: tabular-nums; }
+
+  .body { display: grid; grid-template-columns: 1fr 380px; overflow: hidden; }
+
+  /* ── Left: video ── */
+  .video-panel { position: relative; background: #000; display: flex;
+                 align-items: center; justify-content: center; overflow: hidden; }
+  #camera-img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  #no-signal  { position: absolute; display: flex; flex-direction: column;
+                align-items: center; gap: 10px; color: #334155; }
+  #no-signal .icon { font-size: 3rem; }
+  #no-signal span  { font-size: .9rem; }
+
+  /* Detection badge in top-left corner of video */
+  #det-badge { position: absolute; top: 12px; left: 12px;
+               background: rgba(0,0,0,.65); border-radius: 8px;
+               padding: 6px 12px; font-size: .8rem; color: #94a3b8;
+               backdrop-filter: blur(4px); pointer-events: none; }
+
+  /* ── Right: conversation panel ── */
+  .conv-panel { display: flex; flex-direction: column; background: #0a1628;
+                border-left: 1px solid #1e3a5f; }
+
+  /* Status section */
+  .status-section { padding: 20px 18px 14px; border-bottom: 1px solid #1e3a5f; }
+  .phase-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .phase-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .phase-dot.idle         { background: #4ade80; }
+  .phase-dot.detecting    { background: #fbbf24; animation: pulse .8s infinite; }
+  .phase-dot.conversation { background: #38bdf8; animation: pulse .8s infinite; }
+  .phase-dot.completed    { background: #4ade80; animation: pulse .6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .phase-label { font-size: .85rem; color: #94a3b8; }
+  .phase-label strong { font-size: 1rem; display: block; color: #e2e8f0; }
+
+  .person-card { background: #0f2238; border-radius: 10px; padding: 14px 16px;
+                 border: 1px solid #1e3a5f; display: none; }
+  .person-card.visible { display: block; }
+  .person-name { font-size: 1.4rem; font-weight: 700; color: #f8fafc; margin-bottom: 4px; }
+  .person-meta { font-size: .82rem; color: #64748b; display: flex; gap: 12px; flex-wrap: wrap; }
+  .person-meta .dept { color: #94a3b8; }
+  .conf-bar-wrap { margin-top: 10px; }
+  .conf-bar-bg { background: #0a1628; border-radius: 99px; height: 6px; overflow: hidden; }
+  .conf-bar-fill { height: 100%; border-radius: 99px; background: #22d3ee;
+                   transition: width .4s ease; }
+  .conf-label { font-size: .75rem; color: #64748b; margin-top: 4px; text-align: right; }
+
+  /* Completed banner */
+  .completed-banner { display: none; margin: 0 18px 14px;
+                      background: #052e16; border: 1px solid #4ade80;
+                      border-radius: 8px; padding: 10px 14px;
+                      color: #4ade80; font-size: .9rem; text-align: center; }
+  .completed-banner.show { display: block; }
+
+  /* Transcript section */
+  .transcript-section { flex: 1; overflow: hidden; display: flex; flex-direction: column;
+                         padding: 0 18px 18px; }
+  .transcript-header { padding: 14px 0 8px; font-size: .78rem; font-weight: 600;
+                        color: #475569; letter-spacing: .05em; text-transform: uppercase; }
+  .transcript-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+                     scrollbar-width: thin; scrollbar-color: #1e3a5f transparent; }
+  .transcript-body::-webkit-scrollbar { width: 4px; }
+  .transcript-body::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 2px; }
+
+  .msg { max-width: 90%; padding: 9px 13px; border-radius: 10px;
+         font-size: .88rem; line-height: 1.5; word-break: break-word; }
+  .msg.ai   { background: #0c2d4e; color: #7dd3fc; border-bottom-left-radius: 3px;
+              align-self: flex-start; }
+  .msg.user { background: #14532d; color: #86efac; border-bottom-right-radius: 3px;
+              align-self: flex-end; }
+  .msg .role-tag { font-size: .7rem; opacity: .6; margin-bottom: 3px; }
+
+  .idle-hint { color: #1e3a5f; font-size: .85rem; text-align: center;
+               margin: auto; padding: 20px; }
+  .idle-hint .icon { font-size: 2.5rem; display: block; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <span style="font-size:1.3rem">🔒</span>
+    <h1>機房門禁系統</h1>
+    <div class="header-right">
+      <span id="clock" class="sys-clock"></span>
+      <a href="/" class="header-link">管理後台 →</a>
+    </div>
+  </header>
+
+  <div class="body">
+    <!-- Video -->
+    <div class="video-panel">
+      <img id="camera-img" src="/api/video" alt="攝影機串流"
+           onerror="this.style.display='none';document.getElementById('no-signal').style.display='flex'">
+      <div id="no-signal" style="display:none">
+        <span class="icon">📷</span>
+        <span>攝影機無訊號</span>
+      </div>
+      <div id="det-badge">等待偵測 …</div>
+    </div>
+
+    <!-- Conversation panel -->
+    <div class="conv-panel">
+      <div class="status-section">
+        <div class="phase-row">
+          <div id="phase-dot" class="phase-dot idle"></div>
+          <div class="phase-label">
+            <strong id="phase-text">待機中</strong>
+            <span id="phase-sub">等待人員靠近攝影機</span>
+          </div>
+        </div>
+        <div id="person-card" class="person-card">
+          <div id="person-name" class="person-name">—</div>
+          <div class="person-meta">
+            <span class="dept" id="person-dept"></span>
+            <span id="person-event"></span>
+          </div>
+          <div class="conf-bar-wrap">
+            <div class="conf-bar-bg">
+              <div id="conf-bar" class="conf-bar-fill" style="width:0%"></div>
+            </div>
+            <div class="conf-label">相似度 <span id="conf-pct">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="transcript-section">
+        <div id="completed-banner" class="completed-banner">
+          ✅ 對話已完成，記錄已儲存，3 秒後重置畫面 …
+        </div>
+        <div class="transcript-header">📝 對話記錄</div>
+        <div class="transcript-body" id="transcript">
+          <div class="idle-hint">
+            <span class="icon">🎙️</span>
+            身份確認後將自動開始語音對話
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Clock ────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleDateString('zh-TW') + '  ' +
+    now.toLocaleTimeString('zh-TW');
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+const phaseConfigs = {
+  idle: {
+    dot: 'idle', text: '待機中', sub: '等待人員靠近攝影機',
+    det: '等待偵測 …',
+  },
+  detecting: {
+    dot: 'detecting', text: '偵測中', sub: '偵測到未登記人員',
+    det: '⚠ 未知人員',
+  },
+  conversation: {
+    dot: 'conversation', text: '對話進行中', sub: '身份已確認，詢問進入原因',
+    det: null, // set dynamically
+  },
+  completed: {
+    dot: 'completed', text: '對話完成', sub: '記錄已儲存，即將重置畫面',
+    det: '✅ 完成',
+  },
+};
+
+function applyPhase(phase, extra = {}) {
+  const cfg = phaseConfigs[phase] || phaseConfigs.idle;
+  const dot  = document.getElementById('phase-dot');
+  const text = document.getElementById('phase-text');
+  const sub  = document.getElementById('phase-sub');
+  const det  = document.getElementById('det-badge');
+  const card = document.getElementById('person-card');
+
+  dot.className = 'phase-dot ' + cfg.dot;
+  text.textContent = cfg.text;
+  sub.textContent  = extra.sub || cfg.sub;
+  det.textContent  = cfg.det || extra.det || '';
+
+  if (phase === 'conversation' && extra.person_name) {
+    det.textContent = '✓ ' + extra.person_name;
+    document.getElementById('person-name').textContent = extra.person_name;
+    document.getElementById('person-dept').textContent = extra.department || '';
+    document.getElementById('person-event').textContent =
+      extra.event_id ? '#' + extra.event_id : '';
+    const pct = Math.round((extra.confidence || 0) * 100);
+    document.getElementById('conf-bar').style.width = pct + '%';
+    document.getElementById('conf-pct').textContent = pct + '%';
+    card.classList.add('visible');
+  } else if (phase === 'completed') {
+    card.classList.add('visible');   // keep person card visible during completed
+  } else {
+    card.classList.remove('visible');
+  }
+}
+
+// ── Transcript ────────────────────────────────────────────────────────────────
+let lastTranscriptLength = 0;
+
+function renderTranscript(msgs) {
+  if (!Array.isArray(msgs) || msgs.length === lastTranscriptLength) return;
+  lastTranscriptLength = msgs.length;
+
+  const box = document.getElementById('transcript');
+  // First message: clear idle hint
+  if (msgs.length === 1) box.innerHTML = '';
+
+  // Only append new messages
+  const toAdd = msgs.slice(box.children.length);
+  toAdd.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'msg ' + (m.role === 'ai' ? 'ai' : 'user');
+    const tag = document.createElement('div');
+    tag.className = 'role-tag';
+    tag.textContent = m.role === 'ai' ? '🤖 系統' : '👤 訪客';
+    div.appendChild(tag);
+    div.appendChild(document.createTextNode(m.text));
+    box.appendChild(div);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearTranscript() {
+  lastTranscriptLength = 0;
+  document.getElementById('transcript').innerHTML =
+    '<div class="idle-hint"><span class="icon">🎙️</span>身份確認後將自動開始語音對話</div>';
+}
+
+// ── SSE ───────────────────────────────────────────────────────────────────────
+function connectSSE() {
+  const es = new EventSource('/api/live/stream');
+
+  es.onmessage = (e) => {
+    let data;
+    try { data = JSON.parse(e.data); } catch { return; }
+
+    const phase = data.phase || 'idle';
+    applyPhase(phase, data);
+
+    if (phase === 'conversation') {
+      renderTranscript(data.transcript || []);
+      document.getElementById('completed-banner').classList.remove('show');
+    } else if (phase === 'completed') {
+      renderTranscript(data.transcript || []);   // keep transcript visible
+      document.getElementById('completed-banner').classList.add('show');
+    } else if (phase === 'idle') {
+      document.getElementById('completed-banner').classList.remove('show');
+      clearTranscript();
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    setTimeout(connectSSE, 3000);  // reconnect
+  };
+}
+
+connectSSE();
+
+// ── Camera error recovery ─────────────────────────────────────────────────────
+const camImg = document.getElementById('camera-img');
+camImg.onerror = () => {
+  camImg.style.display = 'none';
+  document.getElementById('no-signal').style.display = 'flex';
+  setTimeout(() => {
+    camImg.src = '/api/video?' + Date.now();
+    camImg.style.display = 'block';
+    document.getElementById('no-signal').style.display = 'none';
+  }, 3000);
+};
+</script>
+</body>
+</html>

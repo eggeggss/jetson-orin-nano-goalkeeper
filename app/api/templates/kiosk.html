@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>備品室門禁 — 即時監控</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #040d1a; color: #e2e8f0;
+               font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+
+  /* ── Layout ── */
+  .page { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 0 24px;
+           background: #0a1628; border-bottom: 1px solid #1e3a5f; }
+  header h1 { font-size: 1.1rem; font-weight: 700; color: #f8fafc; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  .header-link { color: #64748b; text-decoration: none; font-size: .8rem; }
+  .header-link:hover { color: #94a3b8; }
+  .sys-clock { font-size: .85rem; color: #64748b; font-variant-numeric: tabular-nums; }
+
+  .body { display: grid; grid-template-columns: 1fr 380px; overflow: hidden; }
+
+  /* ── Left: video ── */
+  .video-panel { position: relative; background: #000; display: flex;
+                 align-items: center; justify-content: center; overflow: hidden; }
+  #camera-img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  #no-signal  { position: absolute; inset: 0; display: flex; flex-direction: column;
+                align-items: center; justify-content: center; gap: 10px; color: #64748b;
+                background: #000; z-index: 20; }
+  .video-panel.camera-disabled #camera-img { visibility: hidden; }
+  #no-signal .icon { font-size: 3rem; }
+  #no-signal span  { font-size: .9rem; }
+
+  /* Detection badge in top-left corner of video */
+  #det-badge { position: absolute; top: 12px; left: 12px;
+               background: rgba(0,0,0,.65); border-radius: 8px;
+               padding: 6px 12px; font-size: .8rem; color: #94a3b8;
+               backdrop-filter: blur(4px); pointer-events: none; }
+
+  /* ── Right: conversation panel ── */
+  .conv-panel { display: flex; flex-direction: column; background: #0a1628;
+                border-left: 1px solid #1e3a5f; }
+
+  /* Status section */
+  .status-section { padding: 20px 18px 14px; border-bottom: 1px solid #1e3a5f; }
+  .phase-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .phase-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .phase-dot.idle         { background: #4ade80; }
+  .phase-dot.detecting    { background: #fbbf24; animation: pulse .8s infinite; }
+  .phase-dot.recognition_off { background: #64748b; }
+  .phase-dot.enrollment   { background: #a78bfa; animation: pulse .8s infinite; }
+  .phase-dot.conversation { background: #38bdf8; animation: pulse .8s infinite; }
+  .phase-dot.completed    { background: #4ade80; animation: pulse .6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .phase-label { font-size: .85rem; color: #94a3b8; }
+  .phase-label strong { font-size: 1rem; display: block; color: #e2e8f0; }
+  .reset-flow-btn { width: 100%; border: 1px solid #38bdf8; background: #082f49;
+                    color: #7dd3fc; border-radius: 8px; padding: 9px 12px;
+                    font-size: .88rem; font-weight: 700; cursor: pointer;
+                    margin-bottom: 14px; transition: background .15s ease, opacity .15s ease; }
+  .reset-flow-btn:hover { background: #0c4a6e; }
+  .reset-flow-btn:disabled { cursor: wait; opacity: .55; }
+  .recognition-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+                          margin-bottom: 14px; }
+  .recognition-btn { border: 1px solid #334155; border-radius: 8px; padding: 9px 10px;
+                     font-size: .84rem; font-weight: 700; cursor: pointer;
+                     transition: background .15s ease, opacity .15s ease; }
+  .recognition-btn.start { background: #052e16; color: #86efac; border-color: #15803d; }
+  .recognition-btn.stop { background: #450a0a; color: #fca5a5; border-color: #991b1b; }
+  .recognition-btn:hover:not(:disabled) { filter: brightness(1.18); }
+  .recognition-btn:disabled { cursor: not-allowed; opacity: .42; }
+
+  .person-card { background: #0f2238; border-radius: 10px; padding: 14px 16px;
+                 border: 1px solid #1e3a5f; display: none; }
+  .person-card.visible { display: block; }
+  .person-name { font-size: 1.4rem; font-weight: 700; color: #f8fafc; margin-bottom: 4px; }
+  .person-meta { font-size: .82rem; color: #64748b; display: flex; gap: 12px; flex-wrap: wrap; }
+  .person-meta .dept { color: #94a3b8; }
+  .conf-bar-wrap { margin-top: 10px; }
+  .conf-bar-bg { background: #0a1628; border-radius: 99px; height: 6px; overflow: hidden; }
+  .conf-bar-fill { height: 100%; border-radius: 99px; background: #22d3ee;
+                   transition: width .4s ease; }
+  .conf-label { font-size: .75rem; color: #64748b; margin-top: 4px; text-align: right; }
+
+  /* Completed banner */
+  .completed-banner { display: none; margin: 0 18px 14px;
+                      background: #052e16; border: 1px solid #4ade80;
+                      border-radius: 8px; padding: 10px 14px;
+                      color: #4ade80; font-size: .9rem; text-align: center; }
+  .completed-banner.show { display: block; }
+  .completion-summary { display: none; margin: 0 18px 12px;
+                        background: #0f2238; border: 1px solid #1e3a5f;
+                        border-radius: 10px; padding: 14px; }
+  .completion-summary.show { display: block; }
+  .completion-title { color: #4ade80; font-weight: 800; font-size: 1rem; margin-bottom: 10px; }
+  .completion-row { display: grid; grid-template-columns: 72px 1fr; gap: 10px;
+                    font-size: .86rem; line-height: 1.5; padding: 5px 0;
+                    border-top: 1px solid rgba(30,58,95,.7); }
+  .completion-row:first-of-type { border-top: 0; }
+  .completion-label { color: #64748b; }
+  .completion-value { color: #e2e8f0; word-break: break-word; }
+  .countdown-value { color: #fbbf24; font-weight: 800; }
+
+  /* Transcript section */
+  .transcript-section { flex: 1; overflow: hidden; display: flex; flex-direction: column;
+                         padding: 0 18px 18px; }
+  .transcript-header { padding: 14px 0 8px; font-size: .78rem; font-weight: 600;
+                        color: #475569; letter-spacing: .05em; text-transform: uppercase; }
+  .transcript-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+                     scrollbar-width: thin; scrollbar-color: #1e3a5f transparent; }
+  .transcript-body::-webkit-scrollbar { width: 4px; }
+  .transcript-body::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 2px; }
+
+  .msg { max-width: 90%; padding: 9px 13px; border-radius: 10px;
+         font-size: .88rem; line-height: 1.5; word-break: break-word; }
+  .msg.ai   { background: #0c2d4e; color: #7dd3fc; border-bottom-left-radius: 3px;
+              align-self: flex-start; }
+  .msg.user { background: #14532d; color: #86efac; border-bottom-right-radius: 3px;
+              align-self: flex-end; }
+  .msg .role-tag { font-size: .7rem; opacity: .6; margin-bottom: 3px; }
+
+  .idle-hint { color: #1e3a5f; font-size: .85rem; text-align: center;
+               margin: auto; padding: 20px; }
+  .idle-hint .icon { font-size: 2.5rem; display: block; margin-bottom: 10px; }
+
+  /* Warning state */
+  .phase-dot.warning { background: #ef4444; animation: pulse .35s infinite; }
+  .warning-banner { display: none; margin: 0 18px 14px;
+                    background: #450a0a; border: 2px solid #ef4444;
+                    border-radius: 10px; padding: 18px;
+                    text-align: center; }
+  .warning-banner.show { display: block; }
+  .warning-banner .w-icon  { font-size: 2.5rem; display: block; margin-bottom: 8px; }
+  .warning-banner .w-title { font-size: 1.15rem; font-weight: 800;
+                              color: #ef4444; margin-bottom: 6px; }
+  .warning-banner .w-msg   { font-size: .92rem; color: #fca5a5; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <span style="font-size:1.3rem">🔒</span>
+    <h1>備品室門禁系統</h1>
+    <div class="header-right">
+      <span id="clock" class="sys-clock"></span>
+      <a href="/" class="header-link">管理後台 →</a>
+    </div>
+  </header>
+
+  <div class="body">
+    <!-- Video -->
+    <div class="video-panel">
+      <img id="camera-img" src="/api/video" alt="攝影機串流"
+           onerror="this.style.display='none';document.getElementById('no-signal').style.display='flex'">
+      <div id="no-signal" style="display:none">
+        <span class="icon">📷</span>
+        <span>攝影機無訊號</span>
+      </div>
+      <div id="det-badge">等待偵測 …</div>
+    </div>
+
+    <!-- Conversation panel -->
+    <div class="conv-panel">
+      <div class="status-section">
+        <div class="phase-row">
+          <div id="phase-dot" class="phase-dot idle"></div>
+          <div class="phase-label">
+            <strong id="phase-text">待機中</strong>
+            <span id="phase-sub">等待人員靠近攝影機</span>
+          </div>
+        </div>
+        <button id="reset-flow-btn" class="reset-flow-btn" type="button">
+          ↻ 重啟流程（重新辨識／清除對話）
+        </button>
+        <div class="recognition-controls">
+          <button id="recognition-start-btn" class="recognition-btn start" type="button">
+            ▶ 啟動辨識
+          </button>
+          <button id="recognition-stop-btn" class="recognition-btn stop" type="button">
+            ■ 關閉辨識
+          </button>
+        </div>
+        <div id="person-card" class="person-card">
+          <div id="person-name" class="person-name">—</div>
+          <div class="person-meta">
+            <span class="dept" id="person-dept"></span>
+            <span id="person-event"></span>
+          </div>
+          <div class="conf-bar-wrap">
+            <div class="conf-bar-bg">
+              <div id="conf-bar" class="conf-bar-fill" style="width:0%"></div>
+            </div>
+            <div class="conf-label">相似度 <span id="conf-pct">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="transcript-section">
+        <div id="completed-banner" class="completed-banner">
+          ✅ 對話已完成，記錄已儲存；倒數結束後自動重啟流程，也可按「重啟流程」立即重新辨識。
+        </div>
+        <div id="warning-banner" class="warning-banner">
+          <span class="w-icon">⚠️</span>
+          <div class="w-title">無法辨識身份</div>
+          <div class="w-msg">已通知安保人員，請稍候</div>
+        </div>
+        <div id="completion-summary" class="completion-summary">
+          <div class="completion-title">✅ 完成辨識</div>
+          <div class="completion-row">
+            <div class="completion-label">人員</div>
+            <div id="completed-person" class="completion-value">—</div>
+          </div>
+          <div class="completion-row">
+            <div class="completion-label">進入時間</div>
+            <div id="completed-time" class="completion-value">—</div>
+          </div>
+          <div class="completion-row">
+            <div class="completion-label">目的/停留</div>
+            <div id="completed-purpose" class="completion-value">—</div>
+          </div>
+          <div class="completion-row">
+            <div class="completion-label">重啟倒數</div>
+            <div class="completion-value">
+              <span id="completed-countdown" class="countdown-value">—</span> 秒
+            </div>
+          </div>
+        </div>
+        <div class="transcript-header">📝 對話記錄</div>
+        <div class="transcript-body" id="transcript">
+          <div class="idle-hint">
+            <span class="icon">🎙️</span>
+            身份確認後將自動開始語音對話
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Clock ────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleDateString('zh-TW') + '  ' +
+    now.toLocaleTimeString('zh-TW');
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+const phaseConfigs = {
+  idle: {
+    dot: 'idle', text: '待機中', sub: '等待人員靠近攝影機',
+    det: '等待偵測 …',
+  },
+  recognition_off: {
+    dot: 'recognition_off', text: '辨識已關閉', sub: '攝影機預覽保留，人臉辨識與對話不會啟動',
+    det: '■ 辨識已關閉',
+  },
+  detecting: {
+    dot: 'detecting', text: '偵測中', sub: '偵測到未登記人員',
+    det: '⚠ 未知人員',
+  },
+  warning: {
+    dot: 'warning', text: '⚠ 無法辨識身份', sub: '將通知安保人員，請稍候',
+    det: '⚠ 無法辨識',
+  },
+  enrollment: {
+    dot: 'enrollment', text: '人臉建檔中', sub: '後台正在錄製授權人員，前台辨識已暫停',
+    det: '📸 建檔中',
+  },
+  enrollment_done: {
+    dot: 'enrollment', text: '人臉建檔完成', sub: '等待後台存檔後恢復前台辨識',
+    det: '✅ 建檔完成',
+  },
+  conversation: {
+    dot: 'conversation', text: '對話進行中', sub: '身份已確認，詢問目的與停留時間',
+    det: null, // set dynamically
+  },
+  completed: {
+    dot: 'completed', text: '對話完成', sub: '記錄已儲存，30 秒後可再次自動啟動',
+    det: '✅ 完成',
+  },
+};
+
+function applyPhase(phase, extra = {}) {
+  const cfg = phaseConfigs[phase] || phaseConfigs.idle;
+  const dot  = document.getElementById('phase-dot');
+  const text = document.getElementById('phase-text');
+  const sub  = document.getElementById('phase-sub');
+  const det  = document.getElementById('det-badge');
+  const card = document.getElementById('person-card');
+
+  dot.className = 'phase-dot ' + cfg.dot;
+  text.textContent = cfg.text;
+  sub.textContent  = phase === 'completed' && extra.cooldown_remaining !== undefined
+    ? `倒數 ${extra.cooldown_remaining} 秒後自動重啟流程`
+    : (extra.sub || cfg.sub);
+  det.textContent  = cfg.det || extra.det || '';
+
+  if ((phase === 'conversation' || phase === 'completed') && extra.person_name) {
+    det.textContent = '✓ ' + extra.person_name;
+    document.getElementById('person-name').textContent = extra.person_name;
+    document.getElementById('person-dept').textContent = extra.department || '';
+    document.getElementById('person-event').textContent =
+      extra.event_id ? '#' + extra.event_id : '';
+    const pct = Math.round((extra.confidence || 0) * 100);
+    document.getElementById('conf-bar').style.width = pct + '%';
+    document.getElementById('conf-pct').textContent = pct + '%';
+    card.classList.add('visible');
+  } else if (phase === 'completed') {
+    card.classList.add('visible');   // keep person card visible during completed
+  } else {
+    card.classList.remove('visible');
+  }
+}
+
+// ── Transcript ────────────────────────────────────────────────────────────────
+let lastTranscriptLength = 0;
+
+function renderTranscript(msgs) {
+  if (!Array.isArray(msgs) || msgs.length === lastTranscriptLength) return;
+  lastTranscriptLength = msgs.length;
+
+  const box = document.getElementById('transcript');
+  // First message: clear idle hint
+  if (msgs.length === 1) box.innerHTML = '';
+
+  // Only append new messages
+  const toAdd = msgs.slice(box.children.length);
+  toAdd.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'msg ' + (m.role === 'ai' ? 'ai' : 'user');
+    const tag = document.createElement('div');
+    tag.className = 'role-tag';
+    tag.textContent = m.role === 'ai' ? '🤖 系統' : '👤 訪客';
+    div.appendChild(tag);
+    div.appendChild(document.createTextNode(m.text));
+    box.appendChild(div);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearTranscript() {
+  lastTranscriptLength = 0;
+  document.getElementById('transcript').innerHTML =
+    '<div class="idle-hint"><span class="icon">🎙️</span>身份確認後將自動開始語音對話</div>';
+}
+
+function formatCompletedTime(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString('zh-TW') + ' ' +
+         d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderCompletionSummary(data) {
+  document.getElementById('completed-person').textContent = data.person_name || '—';
+  document.getElementById('completed-time').textContent = formatCompletedTime(data.completed_at);
+  document.getElementById('completed-purpose').textContent = data.purpose_summary || '（未提供理由）';
+  document.getElementById('completed-countdown').textContent =
+    Number.isFinite(Number(data.cooldown_remaining)) ? Number(data.cooldown_remaining) : '—';
+  document.getElementById('completion-summary').classList.add('show');
+}
+
+function hideCompletionSummary() {
+  document.getElementById('completion-summary').classList.remove('show');
+}
+
+function setCameraMessage(message) {
+  const span = document.querySelector('#no-signal span:last-child');
+  if (span) span.textContent = message;
+}
+
+function stopCameraStream(message = '攝影機暫停，倒數後重啟') {
+  const noSignal = document.getElementById('no-signal');
+  if (cameraReloadTimer) {
+    clearTimeout(cameraReloadTimer);
+    cameraReloadTimer = null;
+  }
+  document.querySelector('.video-panel').classList.add('camera-disabled');
+  if (camImg) {
+    camImg.onload = null;
+    camImg.removeAttribute('src');
+    camImg.style.display = 'none';
+  }
+  setCameraMessage(message);
+  noSignal.style.display = 'flex';
+  cameraStreamStopped = true;
+}
+
+function reloadCameraStream() {
+  const noSignal = document.getElementById('no-signal');
+  document.querySelector('.video-panel').classList.add('camera-disabled');
+  const oldImg = camImg;
+  oldImg.removeAttribute('src');
+  oldImg.style.display = 'none';
+  setCameraMessage('攝影機重新啟動中 …');
+  noSignal.style.display = 'flex';
+
+  const freshImg = oldImg.cloneNode(false);
+  freshImg.id = 'camera-img';
+  freshImg.alt = '攝影機串流';
+  freshImg.style.display = 'none';
+  oldImg.replaceWith(freshImg);
+  camImg = freshImg;
+  bindCameraErrorHandler();
+
+  cameraReloadTimer = setTimeout(() => {
+    cameraReloadTimer = null;
+    const finishReload = () => {
+      if (cameraReloadTimer) {
+        clearTimeout(cameraReloadTimer);
+        cameraReloadTimer = null;
+      }
+      noSignal.style.display = 'none';
+      setCameraMessage('攝影機無訊號');
+      document.querySelector('.video-panel').classList.remove('camera-disabled');
+      cameraStreamStopped = false;
+      camImg.onload = null;
+    };
+
+    camImg.onload = finishReload;
+    camImg.src = '/api/video?reset=' + Date.now();
+    camImg.style.display = 'block';
+  }, 500);
+}
+
+async function resetFlow(options = {}) {
+  if (resetInProgress) return;
+  resetInProgress = true;
+  const btn = document.getElementById('reset-flow-btn');
+  btn.disabled = true;
+  btn.textContent = '重啟中 …';
+  stopCameraStream('攝影機重啟中 …');
+  try {
+    const res = await fetch('/api/live/reset', { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    document.getElementById('completed-banner').classList.remove('show');
+    document.getElementById('warning-banner').classList.remove('show');
+    hideCompletionSummary();
+    clearTranscript();
+    applyPhase('idle');
+  } catch (err) {
+    if (!options.automatic) {
+      alert('重啟流程失敗：' + err.message);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↻ 重啟流程（重新辨識／清除對話）';
+    resetInProgress = false;
+  }
+}
+
+document.getElementById('reset-flow-btn').addEventListener('click', () => resetFlow());
+document.getElementById('recognition-start-btn').addEventListener('click', () => setRecognitionEnabled(true));
+document.getElementById('recognition-stop-btn').addEventListener('click', () => setRecognitionEnabled(false));
+
+// ── SSE ───────────────────────────────────────────────────────────────────────
+let lastResetGeneration = null;
+let cameraStreamStopped = false;
+let cameraReloadTimer = null;
+let resetInProgress = false;
+let autoResetKey = null;
+let recognitionControlBusy = false;
+
+function syncRecognitionButtons(data, phase) {
+  const enabled = data.recognition_enabled !== false;
+  const isEnrollment = phase === 'enrollment' || phase === 'enrollment_done';
+  const startBtn = document.getElementById('recognition-start-btn');
+  const stopBtn = document.getElementById('recognition-stop-btn');
+  startBtn.disabled = recognitionControlBusy || enabled || isEnrollment;
+  stopBtn.disabled = recognitionControlBusy || !enabled || isEnrollment;
+  startBtn.textContent = recognitionControlBusy && !enabled ? '啟動中 …' : '▶ 啟動辨識';
+  stopBtn.textContent = recognitionControlBusy && enabled ? '關閉中 …' : '■ 關閉辨識';
+}
+
+async function setRecognitionEnabled(enabled) {
+  if (recognitionControlBusy) return;
+  recognitionControlBusy = true;
+  syncRecognitionButtons({ recognition_enabled: !enabled }, enabled ? 'recognition_off' : 'idle');
+  try {
+    const endpoint = enabled ? '/api/recognition/start' : '/api/recognition/stop';
+    const res = await fetch(endpoint, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    if (enabled && cameraStreamStopped) {
+      reloadCameraStream();
+    }
+  } catch (err) {
+    alert((enabled ? '啟動辨識失敗：' : '關閉辨識失敗：') + err.message);
+  } finally {
+    recognitionControlBusy = false;
+  }
+}
+
+function syncCameraState(data, phase) {
+  if (data.camera_off) {
+    const message = phase === 'completed'
+      ? '攝影機暫停，倒數後重啟'
+      : '攝影機無訊號或重新啟動中 …';
+    stopCameraStream(message);
+    return;
+  }
+
+  if (cameraStreamStopped && phase !== 'completed') {
+    reloadCameraStream();
+  }
+}
+
+function triggerAutoResetAfterCountdown(data, phase) {
+  const remaining = Number(data.cooldown_remaining);
+  if (phase !== 'completed' || !Number.isFinite(remaining) || remaining > 0) return;
+
+  const key = `${data.event_id || 'event'}:${data.reset_generation || 0}`;
+  if (autoResetKey === key) return;
+  autoResetKey = key;
+
+  setTimeout(() => resetFlow({ automatic: true }), 100);
+}
+
+function connectSSE() {
+  const es = new EventSource('/api/live/stream');
+
+  es.onmessage = (e) => {
+    let data;
+    try { data = JSON.parse(e.data); } catch { return; }
+
+    if (Number.isFinite(Number(data.reset_generation))) {
+      const generation = Number(data.reset_generation);
+      lastResetGeneration = generation;
+    }
+
+    const phase = data.phase || 'idle';
+    applyPhase(phase, data);
+
+    if (phase === 'conversation') {
+      renderTranscript(data.transcript || []);
+      document.getElementById('completed-banner').classList.remove('show');
+      document.getElementById('warning-banner').classList.remove('show');
+      hideCompletionSummary();
+    } else if (phase === 'recognition_off') {
+      document.getElementById('warning-banner').classList.remove('show');
+      document.getElementById('completed-banner').classList.remove('show');
+      hideCompletionSummary();
+      clearTranscript();
+    } else if (phase === 'warning') {
+      document.getElementById('warning-banner').classList.add('show');
+      document.getElementById('completed-banner').classList.remove('show');
+      hideCompletionSummary();
+      clearTranscript();
+    } else if (phase === 'enrollment' || phase === 'enrollment_done') {
+      document.getElementById('warning-banner').classList.remove('show');
+      document.getElementById('completed-banner').classList.remove('show');
+      hideCompletionSummary();
+      clearTranscript();
+    } else if (phase === 'completed') {
+      renderTranscript(data.transcript || []);   // keep transcript visible
+      document.getElementById('warning-banner').classList.remove('show');
+      document.getElementById('completed-banner').classList.add('show');
+      renderCompletionSummary(data);
+      triggerAutoResetAfterCountdown(data, phase);
+    } else if (phase === 'idle') {
+      document.getElementById('completed-banner').classList.remove('show');
+      document.getElementById('warning-banner').classList.remove('show');
+      hideCompletionSummary();
+      clearTranscript();
+    }
+    syncRecognitionButtons(data, phase);
+    syncCameraState(data, phase);
+  };
+
+  es.onerror = () => {
+    es.close();
+    setTimeout(connectSSE, 3000);  // reconnect
+  };
+}
+
+connectSSE();
+
+// ── Camera error recovery ─────────────────────────────────────────────────────
+let camImg = document.getElementById('camera-img');
+function bindCameraErrorHandler() {
+  camImg.onerror = () => {
+    stopCameraStream('攝影機無訊號，等待重新連線 …');
+  };
+}
+bindCameraErrorHandler();
+</script>
+</body>
+</html>

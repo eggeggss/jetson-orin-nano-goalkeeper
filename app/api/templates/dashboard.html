@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>備品室門禁系統</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body   { font-family: 'Segoe UI', Arial, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    header { background: #1e293b; border-bottom: 2px solid #334155; padding: 16px 24px;
+             display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 1.25rem; color: #f8fafc; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e;
+           box-shadow: 0 0 8px #22c55e; flex-shrink: 0; }
+    .dot.warn { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+    main   { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+    .grid  { display: grid; grid-template-columns: 1fr 280px; gap: 20px; }
+
+    /* ── Cards ── */
+    .card  { background: #1e293b; border-radius: 10px; padding: 18px; margin-bottom: 20px;
+             border: 1px solid #334155; }
+    .card h2 { font-size: .95rem; color: #94a3b8; margin-bottom: 14px;
+               text-transform: uppercase; letter-spacing: .06em; }
+
+    /* ── Stats row ── */
+    .stats { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    .stat  { flex: 1; min-width: 120px; background: #1e293b; border: 1px solid #334155;
+             border-radius: 10px; padding: 14px 18px; text-align: center; }
+    .stat .num { font-size: 2rem; font-weight: 700; color: #38bdf8; }
+    .stat .lbl { font-size: .8rem; color: #94a3b8; margin-top: 4px; }
+
+    /* ── Table ── */
+    table  { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    th     { background: #0f172a; padding: 9px 12px; text-align: left; color: #64748b;
+             font-weight: 600; text-transform: uppercase; font-size: .75rem; letter-spacing: .05em; }
+    td     { padding: 9px 12px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+    tr:hover td { background: #1e3a5f33; cursor: pointer; }
+    .ts    { color: #94a3b8; font-size: .8rem; white-space: nowrap; }
+    .conf  { color: #38bdf8; font-weight: 600; font-size: .9rem; }
+
+    /* ── Badges ── */
+    .badge { display: inline-block; padding: 2px 9px; border-radius: 12px;
+             font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .badge-completed { background: #15803d55; color: #4ade80; border: 1px solid #15803d; }
+    .badge-unknown   { background: #92400e55; color: #fbbf24; border: 1px solid #b45309; }
+    .badge-error     { background: #7f1d1d55; color: #f87171; border: 1px solid #b91c1c; }
+    .badge-conversation_started { background: #1e3a5f; color: #38bdf8; border: 1px solid #0369a1; }
+    .badge-detected  { background: #2d1d5555; color: #c4b5fd; border: 1px solid #6d28d9; }
+
+    /* ── Sidebar ── */
+    .person-item { padding: 8px 10px; border-radius: 6px; margin-bottom: 6px;
+                   background: #0f172a; border: 1px solid #334155; font-size: .85rem;
+                   display: flex; align-items: center; gap: 8px; }
+    .person-info { flex: 1; min-width: 0; }
+    .person-name { font-weight: 600; color: #f8fafc; white-space: nowrap;
+                   overflow: hidden; text-overflow: ellipsis; }
+    .person-dept { color: #94a3b8; font-size: .78rem; }
+    .inactive { opacity: .45; }
+    .person-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .btn-icon { background: none; border: 1px solid #334155; color: #94a3b8;
+                padding: 3px 7px; border-radius: 5px; cursor: pointer; font-size: .75rem;
+                line-height: 1.4; }
+    .btn-icon:hover { border-color: #38bdf8; color: #38bdf8; }
+    .btn-icon.del:hover { border-color: #f87171; color: #f87171; }
+
+    /* ── Transcript modal ── */
+    #modal-bg { display: none; position: fixed; inset: 0; background: #00000099;
+                z-index: 100; align-items: center; justify-content: center; }
+    #modal-bg.open { display: flex; }
+    #modal  { background: #1e293b; border-radius: 12px; padding: 24px; width: 600px;
+              max-width: 95vw; max-height: 80vh; overflow-y: auto; border: 1px solid #334155; }
+    #modal h3 { margin-bottom: 14px; color: #f8fafc; }
+    .transcript-line { padding: 5px 0; border-bottom: 1px solid #334155; font-size: .85rem; }
+    .transcript-line.ai  { color: #7dd3fc; }
+    .transcript-line.usr { color: #86efac; }
+    .close-btn { margin-top: 16px; background: #334155; border: none; color: #e2e8f0;
+                 padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: .9rem; }
+    .refresh-btn { background: #0369a1; border: none; color: white; padding: 6px 14px;
+                   border-radius: 6px; cursor: pointer; font-size: .85rem; float: right; }
+    .refresh-btn:hover { background: #0284c7; }
+
+    /* ── Enrollment modal ── */
+    #enroll-modal-bg { display: none; position: fixed; inset: 0; background: #00000099;
+                       z-index: 100; align-items: center; justify-content: center; }
+    #enroll-modal-bg.open { display: flex; }
+    #enroll-modal { background: #1e293b; border-radius: 12px; padding: 28px; width: 640px;
+                    max-width: 95vw; border: 1px solid #334155; }
+    #enroll-modal h3 { margin-bottom: 18px; color: #f8fafc; font-size: 1.1rem; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: .82rem; color: #94a3b8; margin-bottom: 5px; }
+    .form-group input, .form-group select {
+      width: 100%; background: #0f172a; border: 1px solid #334155; color: #e2e8f0;
+      padding: 8px 12px; border-radius: 6px; font-size: .9rem; outline: none; }
+    .form-group input:focus { border-color: #38bdf8; }
+    .btn-primary { background: #0369a1; border: none; color: white; padding: 9px 20px;
+                   border-radius: 7px; cursor: pointer; font-size: .92rem; font-weight: 600; }
+    .btn-primary:hover { background: #0284c7; }
+    .btn-danger  { background: #7f1d1d; border: none; color: #fca5a5; padding: 7px 16px;
+                   border-radius: 7px; cursor: pointer; font-size: .85rem; }
+    .enroll-camera-wrap { position: relative; display: none; margin: 14px 0;
+                          border-radius: 10px; overflow: hidden;
+                          background: #0f172a; border: 1px solid #334155; }
+    #enroll-camera { width: 100%; display: block; }
+    .face-guide { position: absolute; left: 50%; top: 50%; width: 34%; height: 50%;
+                  transform: translate(-50%, -50%); border: 4px solid #fbbf24;
+                  border-radius: 48% 48% 42% 42%; box-shadow: 0 0 0 999px rgba(15,23,42,.28);
+                  pointer-events: none; transition: border-color .2s ease, box-shadow .2s ease; }
+    .face-guide.ok { border-color: #4ade80; box-shadow: 0 0 18px #22c55e99, 0 0 0 999px rgba(15,23,42,.18); }
+    .face-guide.bad { border-color: #f87171; box-shadow: 0 0 18px #ef444499, 0 0 0 999px rgba(15,23,42,.35); }
+    .guide-label { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+                   background: rgba(15,23,42,.86); border: 1px solid #334155; color: #e2e8f0;
+                   padding: 6px 12px; border-radius: 999px; font-size: .82rem; pointer-events: none; }
+    #enroll-progress-wrap { display: none; }
+    .capture-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+                       margin: 4px 0 12px; }
+    .capture-summary-card { background: #0f172a; border: 1px solid #334155;
+                            border-radius: 10px; padding: 12px 14px; }
+    .capture-summary-card .label { color: #64748b; font-size: .76rem; margin-bottom: 4px; }
+    .capture-summary-card .value { color: #f8fafc; font-size: 1.35rem; font-weight: 800; }
+    .capture-summary-card.done .value { color: #4ade80; }
+    .hold-progress-row { display: flex; justify-content: space-between; align-items: center;
+                         margin-top: 12px; font-size: .82rem; color: #94a3b8; }
+    #enroll-hold-pct { color: #fbbf24; font-weight: 700; }
+    .hold-bar-fill { height: 100%; background: #fbbf24; border-radius: 99px;
+                     transition: width .2s ease; }
+    .fit-hint { margin-top: 8px; color: #64748b; font-size: .78rem; line-height: 1.5; }
+    .progress-bar-bg { background: #0f172a; border-radius: 99px; height: 10px;
+                       border: 1px solid #334155; margin: 8px 0; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: #38bdf8; border-radius: 99px;
+                         transition: width .3s ease; }
+    #enroll-status-txt { font-size: .85rem; color: #94a3b8; min-height: 1.4em; }
+    .enroll-btn { background: #15803d; border: none; color: #bbf7d0; padding: 7px 14px;
+                  border-radius: 6px; cursor: pointer; font-size: .85rem; margin-right: 8px; }
+    /* ── Tabs ── */
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+    .tab-btn { background: #1e293b; border: 1px solid #334155; color: #94a3b8;
+               padding: 8px 20px; border-radius: 7px; cursor: pointer; font-size: .9rem; }
+    .tab-btn.active { background: #0369a1; border-color: #0369a1; color: #fff; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── Live monitor ── */
+    .live-grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
+    #live-camera { width: 100%; border-radius: 8px; border: 2px solid #334155; background: #0f172a; display: block; }
+    .phase-badge { display: inline-flex; align-items: center; gap: 8px;
+                   padding: 6px 14px; border-radius: 20px; font-size: .85rem; font-weight: 600; margin-bottom: 12px; }
+    .phase-idle  { background:#0f2818; color:#4ade80; border:1px solid #15803d; }
+    .phase-detecting { background:#1c1200; color:#fbbf24; border:1px solid #b45309; }
+    .phase-conversation { background:#0c1e36; color:#38bdf8; border:1px solid #0369a1; }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+                animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    #live-transcript { background: #0f172a; border-radius: 8px; border: 1px solid #334155;
+                       padding: 12px; height: 320px; overflow-y: auto; }
+    .lt-line { padding: 5px 0; border-bottom: 1px solid #1e293b; font-size: .85rem; }
+    .lt-line.ai  { color: #7dd3fc; }
+    .lt-line.usr { color: #86efac; }
+    .lt-empty { color: #334155; font-size: .85rem; text-align: center; margin-top: 60px; }
+    .live-info { margin-bottom: 12px; font-size: .9rem; }
+    .live-info strong { color: #f8fafc; }
+    .live-info .lbl { color: #64748b; font-size: .78rem; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="dot" id="status-dot"></div>
+  <h1>🔒 備品室門禁系統</h1>
+  <span style="margin-left: auto; font-size:.8rem; color:#64748b;" id="last-refresh"></span>
+</header>
+
+<main>
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <div class="num" id="stat-events">{{ events|length }}</div>
+      <div class="lbl">最近事件</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="stat-persons">{{ persons|selectattr('is_active')|list|length }}</div>
+      <div class="lbl">授權人員</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="stat-completed">{{ events|selectattr('status','equalto','completed')|list|length }}</div>
+      <div class="lbl">已完成對話</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="stat-unknown">{{ events|selectattr('status','equalto','unknown')|list|length }}</div>
+      <div class="lbl">未知人員</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('events')">📋 事件紀錄</button>
+    <button class="tab-btn" onclick="switchTab('live')">📡 即時監控</button>
+  </div>
+
+  <!-- Tab: events -->
+  <div id="tab-events" class="tab-pane active">
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h2>最近進入事件
+            <button class="refresh-btn" onclick="location.reload()">重新整理</button>
+          </h2>
+          <table>
+            <thead>
+              <tr>
+                <th>時間</th><th>姓名</th><th>相似度</th><th>狀態</th><th>理由摘要</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in events %}
+              <tr onclick="showTranscript({{ e.id }})">
+                <td class="ts">{{ e.created_at }}</td>
+                <td>{{ e.person_name }}</td>
+                <td class="conf">{{ "%.1f"|format(e.confidence * 100) }}%</td>
+                <td>
+                  <span class="badge badge-{{ e.status }}">
+                    {% if e.status == 'completed' %}已完成
+                    {% elif e.status == 'unknown' %}未知人員
+                    {% elif e.status == 'error' %}錯誤
+                    {% elif e.status == 'conversation_started' %}對話中
+                    {% else %}{{ e.status }}{% endif %}
+                  </span>
+                </td>
+                <td>{{ e.summary or '-' }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" style="text-align:center;color:#64748b;padding:30px">尚無事件紀錄</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Sidebar: persons -->
+      <div>
+        <div class="card">
+          <h2>授權人員
+            <button class="enroll-btn" onclick="openEnrollModal()" style="float:right">＋ 新增人員</button>
+          </h2>
+          {% for p in persons %}
+          <div class="person-item {% if not p.is_active %}inactive{% endif %}">
+            <div class="person-info">
+              <div class="person-name">{{ p.name }}</div>
+              <div class="person-dept">{{ p.department or '—' }}
+                {% if not p.is_active %}<span style="color:#f87171"> · 停用</span>{% endif %}
+              </div>
+            </div>
+            <div class="person-actions">
+              <button class="btn-icon" title="編輯"
+                onclick="openEditModal({{ p.id }},'{{ p.name|replace("'","\\'") }}','{{ (p.department or '')|replace("'","\\'") }}','{{ (p.employee_id or '')|replace("'","\\'") }}',{{ 1 if p.is_active else 0 }})">✏️</button>
+              <button class="btn-icon del" title="刪除"
+                onclick="deletePerson({{ p.id }},'{{ p.name|replace("'","\\'") }}')">🗑</button>
+            </div>
+          </div>
+          {% else %}
+          <p style="color:#64748b;font-size:.85rem">尚無授權人員<br>點擊「＋ 新增人員」開始建檔</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: live monitor -->
+  <div id="tab-live" class="tab-pane">
+    <div class="live-grid">
+      <!-- Camera -->
+      <div class="card" style="padding:14px">
+        <h2 style="margin-bottom:10px">攝影機畫面</h2>
+        <img id="live-camera" src="" alt="攝影機載入中 …">
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+          <div id="live-phase-badge" class="phase-badge phase-idle">
+            <span class="live-dot"></span>
+            <span id="live-phase-text">待機中</span>
+          </div>
+          <span id="live-conf" style="font-size:.8rem;color:#64748b"></span>
+        </div>
+      </div>
+
+      <!-- Conversation panel -->
+      <div class="card" style="padding:14px">
+        <h2 style="margin-bottom:10px">即時對話</h2>
+        <div id="live-person-info" class="live-info" style="display:none">
+          <div class="lbl">已識別人員</div>
+          <strong id="live-person-name"></strong>
+          <span id="live-person-dept" style="color:#94a3b8;font-size:.82rem"></span>
+        </div>
+        <div id="live-transcript">
+          <div class="lt-empty">等待人臉辨識觸發對話 …</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Transcript modal -->
+<div id="modal-bg">
+  <div id="modal">
+    <h3 id="modal-title">對話逐字稿</h3>
+    <div id="modal-body"></div>
+    <button class="close-btn" onclick="closeModal()">關閉</button>
+  </div>
+</div>
+
+<!-- Enrollment modal -->
+<div id="enroll-modal-bg">
+  <div id="enroll-modal">
+    <h3>📸 新增授權人員</h3>
+
+    <!-- Step 1: form -->
+    <div id="enroll-step-form">
+      <div class="form-group">
+        <label>姓名 *</label>
+        <input id="ef-name" type="text" placeholder="請輸入姓名">
+      </div>
+      <div class="form-group">
+        <label>部門</label>
+        <input id="ef-dept" type="text" placeholder="例：IT部門">
+      </div>
+      <div class="form-group">
+        <label>員工編號</label>
+        <input id="ef-empid" type="text" placeholder="選填">
+      </div>
+      <div class="form-group">
+        <label>擷取樣本數</label>
+        <select id="ef-samples">
+          <option value="3">3 個（快速）</option>
+          <option value="5" selected>5 個（建議）</option>
+          <option value="8">8 個（精準）</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <button class="btn-primary" onclick="startEnrollment()">開始錄製人臉</button>
+        <button class="close-btn" onclick="closeEnrollModal()">取消</button>
+      </div>
+    </div>
+
+    <!-- Step 2: capture progress -->
+    <div id="enroll-step-capture" style="display:none">
+      <div class="capture-summary">
+        <div class="capture-summary-card">
+          <div class="label">應完成</div>
+          <div class="value"><span id="enroll-needed-top">5</span> 張</div>
+        </div>
+        <div class="capture-summary-card done">
+          <div class="label">已完成</div>
+          <div class="value"><span id="enroll-captured-top">0</span> 張</div>
+        </div>
+      </div>
+      <div id="enroll-camera-wrap" class="enroll-camera-wrap">
+        <img id="enroll-camera" src="" alt="攝影機預覽">
+        <div id="face-guide" class="face-guide"></div>
+        <div id="guide-label" class="guide-label">請將臉靠近鏡頭並對準方框</div>
+      </div>
+      <div id="enroll-progress-wrap">
+        <div class="hold-progress-row">
+          <span>停留百分比</span>
+          <span id="enroll-hold-pct">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="hold-bar-fill" id="enroll-hold-bar" style="width:0%"></div>
+        </div>
+        <div class="fit-hint">請讓臉部接近鏡頭、填滿方框，並保持不動直到停留百分比達 100%。</div>
+        <div style="display:flex;justify-content:space-between;font-size:.82rem;color:#94a3b8">
+          <span>擷取進度</span>
+          <span id="enroll-count">0 / 5</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="enroll-bar" style="width:0%"></div>
+        </div>
+        <div id="enroll-status-txt">準備中 …</div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:10px">
+        <button class="btn-danger" onclick="cancelEnrollment()">取消錄製</button>
+      </div>
+    </div>
+
+    <!-- Step 3: done -->
+    <div id="enroll-step-done" style="display:none">
+      <p style="color:#4ade80;font-size:1rem;margin-bottom:16px">✓ 人臉資料錄製完成，可以存檔！</p>
+      <p id="enroll-done-name" style="color:#94a3b8;font-size:.9rem;margin-bottom:16px"></p>
+      <button class="btn-primary" onclick="finishEnrollment()">存檔並返回</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit person modal -->
+<div id="edit-modal-bg" style="display:none;position:fixed;inset:0;background:#00000099;z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border-radius:12px;padding:28px;width:420px;max-width:95vw;border:1px solid #334155;">
+    <h3 style="margin-bottom:18px;color:#f8fafc;font-size:1.05rem;">✏️ 編輯人員資料</h3>
+    <input type="hidden" id="edit-person-id">
+    <div class="form-group">
+      <label>姓名 *</label>
+      <input id="edit-name" type="text">
+    </div>
+    <div class="form-group">
+      <label>部門</label>
+      <input id="edit-dept" type="text">
+    </div>
+    <div class="form-group">
+      <label>員工編號</label>
+      <input id="edit-empid" type="text">
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+      <input type="checkbox" id="edit-active" style="width:auto;accent-color:#38bdf8;">
+      <label for="edit-active" style="margin:0;cursor:pointer;">啟用中</label>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn-primary" onclick="saveEdit()">儲存</button>
+      <button class="close-btn" style="margin-top:0" onclick="closeEditModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Status indicator ──────────────────────────────────────────────────────
+  const dot = document.getElementById('status-dot');
+  document.getElementById('last-refresh').textContent =
+    '更新：' + new Date().toLocaleTimeString('zh-TW');
+
+  fetch('/api/status').then(r => r.json()).then(d => {
+    dot.className = d.model_loaded ? 'dot' : 'dot warn';
+  }).catch(() => { dot.className = 'dot warn'; });
+
+  // ── Auto-refresh every 30 s ───────────────────────────────────────────────
+  setTimeout(() => {
+    if (!document.getElementById('enroll-modal-bg').classList.contains('open')) {
+      location.reload();
+    }
+  }, 30000);
+
+  // ── Transcript modal ──────────────────────────────────────────────────────
+  async function showTranscript(id) {
+    const data = await fetch('/api/events/' + id).then(r => r.json());
+    document.getElementById('modal-title').textContent =
+      `#${id}  ${data.person_name}  ·  ${data.created_at}`;
+
+    const body = document.getElementById('modal-body');
+    body.innerHTML = '';
+
+    if (data.transcript) {
+      data.transcript.split('\n').forEach(line => {
+        const d = document.createElement('div');
+        d.className = 'transcript-line ' + (line.startsWith('[助理]') ? 'ai' : 'usr');
+        d.textContent = line;
+        body.appendChild(d);
+      });
+    } else {
+      body.innerHTML = '<p style="color:#64748b">（無逐字稿）</p>';
+    }
+    if (data.summary) {
+      const s = document.createElement('p');
+      s.style = 'margin-top:12px;font-size:.85rem;color:#94a3b8';
+      s.textContent = '摘要：' + data.summary;
+      body.appendChild(s);
+    }
+    document.getElementById('modal-bg').className = 'open';
+  }
+
+  function closeModal() {
+    document.getElementById('modal-bg').className = '';
+  }
+  document.getElementById('modal-bg').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+
+  // ── Enrollment modal ──────────────────────────────────────────────────────
+  let _snapInterval = null;
+  let _pollInterval = null;
+
+  function openEnrollModal() {
+    document.getElementById('enroll-step-form').style.display = '';
+    document.getElementById('enroll-step-capture').style.display = 'none';
+    document.getElementById('enroll-step-done').style.display = 'none';
+    document.getElementById('enroll-modal-bg').className = 'open';
+  }
+
+  function closeEnrollModal() {
+    stopEnrollPolling();
+    document.getElementById('enroll-modal-bg').className = '';
+  }
+
+  function startSnapshotFeed() {
+    const img = document.getElementById('enroll-camera');
+    document.getElementById('enroll-camera-wrap').style.display = 'block';
+    _snapInterval = setInterval(() => {
+      img.src = '/api/snapshot?t=' + Date.now();
+    }, 400);
+  }
+
+  function stopEnrollPolling() {
+    clearInterval(_snapInterval); _snapInterval = null;
+    clearInterval(_pollInterval); _pollInterval = null;
+    const img = document.getElementById('enroll-camera');
+    document.getElementById('enroll-camera-wrap').style.display = 'none';
+    img.src = '';
+  }
+
+  function updateEnrollFitUI(s) {
+    const status = s.face_fit_status || 'waiting';
+    const hold = Math.max(0, Math.min(100, Number(s.hold_progress || 0)));
+    const size = Number(s.face_size_percent || 0);
+    const guide = document.getElementById('face-guide');
+    const label = document.getElementById('guide-label');
+
+    guide.className = 'face-guide';
+    if (status === 'holding' || status === 'captured' || status === 'completed') {
+      guide.classList.add('ok');
+    } else if (status !== 'waiting') {
+      guide.classList.add('bad');
+    }
+
+    const labelMap = {
+      waiting: '請將臉靠近鏡頭並對準方框',
+      too_far: `臉太小 ${size}%：請再靠近鏡頭`,
+      too_close: `臉太大 ${size}%：請稍微後退`,
+      off_center: '請將臉移到方框中央',
+      holding: `位置正確，保持不動 ${hold}%`,
+      captured: '已擷取一張，請繼續保持在方框內',
+      completed: '錄製完成，可以存檔',
+    };
+    label.textContent = labelMap[status] || '請正對攝影機';
+    document.getElementById('enroll-hold-pct').textContent = hold + '%';
+    document.getElementById('enroll-hold-bar').style.width = hold + '%';
+  }
+
+  async function startEnrollment() {
+    const name = document.getElementById('ef-name').value.trim();
+    if (!name) { alert('請輸入姓名'); return; }
+    const dept = document.getElementById('ef-dept').value.trim();
+    const empid = document.getElementById('ef-empid').value.trim();
+    const samples = parseInt(document.getElementById('ef-samples').value);
+
+    const res = await fetch('/api/enroll/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, department: dept, employee_id: empid, samples})
+    });
+    if (!res.ok) { alert('啟動失敗：' + (await res.text())); return; }
+
+    document.getElementById('enroll-needed-top').textContent = samples;
+    document.getElementById('enroll-captured-top').textContent = '0';
+    document.getElementById('enroll-count').textContent = '0 / ' + samples;
+    document.getElementById('enroll-bar').style.width = '0%';
+    document.getElementById('enroll-hold-pct').textContent = '0%';
+    document.getElementById('enroll-hold-bar').style.width = '0%';
+    document.getElementById('face-guide').className = 'face-guide';
+    document.getElementById('guide-label').textContent = '請將臉靠近鏡頭並對準方框';
+    document.getElementById('enroll-status-txt').textContent = '準備擷取，請將臉靠近鏡頭並對準方框 …';
+    document.getElementById('enroll-step-form').style.display = 'none';
+    document.getElementById('enroll-step-capture').style.display = '';
+    document.getElementById('enroll-progress-wrap').style.display = '';
+
+    startSnapshotFeed();
+    _pollInterval = setInterval(pollEnrollStatus, 600);
+  }
+
+  async function pollEnrollStatus() {
+    const s = await fetch('/api/enroll/status').then(r => r.json());
+    const pct = s.samples_needed > 0 ? (s.samples_captured / s.samples_needed * 100) : 0;
+    document.getElementById('enroll-needed-top').textContent = s.samples_needed;
+    document.getElementById('enroll-captured-top').textContent = s.samples_captured;
+    document.getElementById('enroll-count').textContent = s.samples_captured + ' / ' + s.samples_needed;
+    document.getElementById('enroll-bar').style.width = pct + '%';
+    document.getElementById('enroll-status-txt').textContent = s.last_status || '';
+    updateEnrollFitUI(s);
+
+    if (s.completed) {
+      stopEnrollPolling();
+      document.getElementById('enroll-step-capture').style.display = 'none';
+      document.getElementById('enroll-done-name').textContent =
+        s.person_name + ' 已完成 ' + s.samples_needed + ' 個樣本建檔';
+      document.getElementById('enroll-step-done').style.display = '';
+    }
+  }
+
+  async function cancelEnrollment() {
+    await fetch('/api/enroll/cancel', {method: 'POST'});
+    stopEnrollPolling();
+    closeEnrollModal();
+  }
+
+  async function finishEnrollment() {
+    await fetch('/api/enroll/finish', {method: 'POST'});
+    closeEnrollModal();
+    location.reload();
+  }
+
+  document.getElementById('enroll-modal-bg').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeEnrollModal();
+  });
+
+  // ── Edit person ───────────────────────────────────────────────────────────
+  function openEditModal(id, name, dept, empid, isActive) {
+    document.getElementById('edit-person-id').value = id;
+    document.getElementById('edit-name').value = name;
+    document.getElementById('edit-dept').value = dept;
+    document.getElementById('edit-empid').value = empid;
+    document.getElementById('edit-active').checked = !!isActive;
+    const bg = document.getElementById('edit-modal-bg');
+    bg.style.display = 'flex';
+  }
+
+  function closeEditModal() {
+    document.getElementById('edit-modal-bg').style.display = 'none';
+  }
+
+  async function saveEdit() {
+    const id = document.getElementById('edit-person-id').value;
+    const name = document.getElementById('edit-name').value.trim();
+    if (!name) { alert('姓名不可為空'); return; }
+    const res = await fetch('/api/persons/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name,
+        department: document.getElementById('edit-dept').value.trim(),
+        employee_id: document.getElementById('edit-empid').value.trim(),
+        is_active: document.getElementById('edit-active').checked,
+      })
+    });
+    if (res.ok) { closeEditModal(); location.reload(); }
+    else { alert('儲存失敗：' + (await res.text())); }
+  }
+
+  document.getElementById('edit-modal-bg').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeEditModal();
+  });
+
+  // ── Delete person ─────────────────────────────────────────────────────────
+  async function deletePerson(id, name) {
+    if (!confirm(`確定要永久刪除「${name}」？\n此操作將刪除該人員的所有人臉資料，無法復原。`)) return;
+    const res = await fetch('/api/persons/' + id + '/hard', {method: 'DELETE'});
+    if (res.ok) location.reload();
+    else alert('刪除失敗：' + (await res.text()));
+  }
+</script>
+</body>
+</html>

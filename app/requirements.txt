@@ -1,0 +1,25 @@
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+jinja2==3.1.4
+python-multipart==0.0.9
+aiofiles==23.2.1
+
+# Face recognition
+insightface==0.7.3
+onnxruntime==1.18.0
+opencv-python-headless==4.9.0.80
+Pillow==10.3.0
+
+# Numerics
+numpy==1.26.4
+scipy==1.13.0
+
+# Audio
+sounddevice==0.4.6
+
+# OpenAI Realtime API
+websockets==12.0
+
+# Config & utils
+python-dotenv==1.0.1
+httpx==0.27.0

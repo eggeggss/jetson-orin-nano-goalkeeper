@@ -1,0 +1,56 @@
+# ── Secrets & environment ────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Runtime data (generated on device, not source code) ──────────────────────
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/events/
+
+# ── AI models (large binaries — download on device) ──────────────────────────
+models/
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+pip-wheel-metadata/
+.mypy_cache/
+.pytype/
+.ruff_cache/
+.pytest_cache/
+
+# ── Virtual envs ─────────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Docker build cache ───────────────────────────────────────────────────────
+.docker/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Editor / OS ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Backup files left by scripts ─────────────────────────────────────────────
+*.bak
+*.bak.*
